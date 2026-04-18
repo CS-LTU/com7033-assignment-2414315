@@ -1,52 +1,11 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="card shadow-lg">
-  <div class="card-body p-4">
-    <h5 class="fw-bold text-center text-primary mb-4">
-      <i class="bi bi-lock-fill me-2"></i>Sign In
-    </h5>
-    <form method="POST" novalidate>
-      {{ form.hidden_tag() }}
-
-      <div class="mb-3">
-        {{ form.username.label(class="form-label fw-semibold small") }}
-        {{ form.username(class="form-control" + (" is-invalid" if form.username.errors else ""),
-                         placeholder="Username", autocomplete="username") }}
-        {% for e in form.username.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
-      </div>
-
-      <div class="mb-3">
-        {{ form.password.label(class="form-label fw-semibold small") }}
-        <div class="input-group">
-          {{ form.password(class="form-control" + (" is-invalid" if form.password.errors else ""),
-                           placeholder="Password", autocomplete="current-password", id="lPwd") }}
-          <button class="btn btn-outline-secondary" type="button" onclick="tglPwd('lPwd',this)">
-            <i class="bi bi-eye"></i>
-          </button>
-        </div>
-        {% for e in form.password.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
-      </div>
-
-      <div class="mb-3 form-check">
-        {{ form.remember_me(class="form-check-input") }}
-        {{ form.remember_me.label(class="form-check-label text-white-50 small") }}
-      </div>
-
-      {{ form.submit(class="btn btn-primary w-100 fw-semibold") }}
-    </form>
-    <p class="text-center text-white-50 small mt-3 mb-0">
-      No account? <a href="{{ url_for('auth.register') }}" class="text-info">Register here</a>
-    </p>
-  </div>
+<div class="text-center py-5">
+  <i class="bi bi-shield-lock-fill text-warning" style="font-size:4rem;"></i>
+  <h1 class="display-4 fw-bold text-primary mt-3">403</h1>
+  <p class="text-muted">You don't have permission to view this page.</p>
+  <a href="{{ url_for('dashboard.index') }}" class="btn btn-primary mt-2">
+    <i class="bi bi-house-fill me-1"></i>Go to Dashboard
+  </a>
 </div>
-{% endblock %}
-
-{% block extra_scripts %}
-<script>
-function tglPwd(id, btn) {
-  const i = document.getElementById(id);
-  i.type = i.type === 'password' ? 'text' : 'password';
-  btn.innerHTML = i.type === 'password' ? '<i class="bi bi-eye"></i>' : '<i class="bi bi-eye-slash"></i>';
-}
-</script>
 {% endblock %}

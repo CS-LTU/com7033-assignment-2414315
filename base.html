@@ -1,24 +1,52 @@
-#!/bin/bash
-# setup.sh - Initialises the project
+{% extends "base.html" %}
+{% block content %}
+<div class="card shadow-lg">
+  <div class="card-body p-4">
+    <h5 class="fw-bold text-center text-primary mb-4">
+      <i class="bi bi-lock-fill me-2"></i>Sign In
+    </h5>
+    <form method="POST" novalidate>
+      {{ form.hidden_tag() }}
 
-if [ ! -f .env ]; then
-    echo "[Setup] Creating .env file from .env.example..."
-    cp .env.example .env
-fi
+      <div class="mb-3">
+        {{ form.username.label(class="form-label fw-semibold small") }}
+        {{ form.username(class="form-control" + (" is-invalid" if form.username.errors else ""),
+                         placeholder="Username", autocomplete="username") }}
+        {% for e in form.username.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+      </div>
 
-echo "[Setup] Preparing Python environment with uv..."
-uv sync
+      <div class="mb-3">
+        {{ form.password.label(class="form-label fw-semibold small") }}
+        <div class="input-group">
+          {{ form.password(class="form-control" + (" is-invalid" if form.password.errors else ""),
+                           placeholder="Password", autocomplete="current-password", id="lPwd") }}
+          <button class="btn btn-outline-secondary" type="button" onclick="tglPwd('lPwd',this)">
+            <i class="bi bi-eye"></i>
+          </button>
+        </div>
+        {% for e in form.password.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+      </div>
 
-echo "[Setup] Ensuring Docker is running..."
-sudo systemctl start docker
+      <div class="mb-3 form-check">
+        {{ form.remember_me(class="form-check-input") }}
+        {{ form.remember_me.label(class="form-check-label text-white-50 small") }}
+      </div>
 
-echo "[Setup] Starting MongoDB container..."
-sudo docker run -d -p 27017:27017 --name stroke_mongo mongo:4.4 2>/dev/null || sudo docker start stroke_mongo
+      {{ form.submit(class="btn btn-primary w-100 fw-semibold") }}
+    </form>
+    <p class="text-center text-white-50 small mt-3 mb-0">
+      No account? <a href="{{ url_for('auth.register') }}" class="text-info">Register here</a>
+    </p>
+  </div>
+</div>
+{% endblock %}
 
-echo "[Setup] Waiting for MongoDB to initialise..."
-sleep 3
-
-echo "[Setup] Importing datasets..."
-uv run python import_dataset.py --clear
-
-echo "✅ Setup complete! You can now run './run.sh' to start the application."
+{% block extra_scripts %}
+<script>
+function tglPwd(id, btn) {
+  const i = document.getElementById(id);
+  i.type = i.type === 'password' ? 'text' : 'password';
+  btn.innerHTML = i.type === 'password' ? '<i class="bi bi-eye"></i>' : '<i class="bi bi-eye-slash"></i>';
+}
+</script>
+{% endblock %}
