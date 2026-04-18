@@ -1,21 +1,24 @@
-"""
-run.py — Application entry point
+#!/bin/bash
+# setup.sh - Initialises the project
 
-Usage (development):
-    python run.py
+if [ ! -f .env ]; then
+    echo "[Setup] Creating .env file from .env.example..."
+    cp .env.example .env
+fi
 
-Usage (production with Gunicorn):
-    gunicorn "stroke_app:create_app()" --bind 0.0.0.0:8000 --workers 4
-"""
-import sys
-import os
+echo "[Setup] Preparing Python environment with uv..."
+uv sync
 
-# Add parent directory to sys.path so 'stroke_app' can be imported correctly
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+echo "[Setup] Ensuring Docker is running..."
+sudo systemctl start docker
 
-from stroke_app import create_app
+echo "[Setup] Starting MongoDB container..."
+sudo docker run -d -p 27017:27017 --name stroke_mongo mongo:4.4 2>/dev/null || sudo docker start stroke_mongo
 
-app = create_app()
+echo "[Setup] Waiting for MongoDB to initialise..."
+sleep 3
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+echo "[Setup] Importing datasets..."
+uv run python import_dataset.py --clear
+
+echo "✅ Setup complete! You can now run './run.sh' to start the application."
