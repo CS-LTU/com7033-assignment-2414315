@@ -1,52 +1,87 @@
 """
-models/db_sqlite.py
+models/user.py
 
-SQLite connection layer for user authentication.
-All queries use parameterised statements — never string interpolation.
-This prevents SQL injection attacks.
+User model for authentication.
+Integrates with Flask-Login.
+Passwords stored as Werkzeug pbkdf2:sha256 hashes — never plaintext.
 """
 
-import sqlite3
-import contextlib
 import logging
+from flask_login import UserMixin
+from werkzeug.security import generate_password_hash, check_password_hash
+from .db_sqlite import get_connection
 
 logger = logging.getLogger(__name__)
-_DB_PATH: str = ""
 
 
-def init_sqlite_db(app) -> None:
-    """Create users table on first run. Called once at app startup."""
-    global _DB_PATH
-    _DB_PATH = app.config["SQLITE_DB_PATH"]
-    with get_connection() as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                username   TEXT    NOT NULL UNIQUE COLLATE NOCASE,
-                email      TEXT    NOT NULL UNIQUE,
-                password   TEXT    NOT NULL,
-                role       TEXT    NOT NULL DEFAULT 'doctor',
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        conn.commit()
-    logger.info("SQLite initialised at %s", _DB_PATH)
+class User(UserMixin):
+    """Represents a hospital user (doctor/admin) stored in SQLite."""
 
+    def __init__(self, id, username, email, password, role="doctor", created_at=None):
+        self.id = id
+        self.username = username
+        self.email = email
+        self.password = password   # Hashed value from DB
+        self.role = role
+        self.created_at = created_at
 
-@contextlib.contextmanager
-def get_connection():
-    """
-    Context manager yielding a sqlite3 connection.
-    Rows are accessible by column name via Row factory.
-    Auto-closes on exit.
-    """
-    conn = sqlite3.connect(_DB_PATH)
-    conn.row_factory = sqlite3.Row
-    try:
-        yield conn
-    except sqlite3.Error as exc:
-        logger.error("SQLite error: %s", exc)
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
+    def get_id(self) -> str:
+        """Required by Flask-Login — return user ID as string."""
+        return str(self.id)
+
+    @property
+    def is_admin(self) -> bool:
+        return self.role == "admin"
+
+    # ── Password helpers ─────────────────────────────────────────────────────
+
+    @staticmethod
+    def hash_password(plain: str) -> str:
+        """Hash plaintext password. Uses pbkdf2:sha256 with 16-byte salt."""
+        return generate_password_hash(plain, method="pbkdf2:sha256", salt_length=16)
+
+    def verify_password(self, plain: str) -> bool:
+        """Check plaintext password against stored hash."""
+        return check_password_hash(self.password, plain)
+
+    # ── CRUD ─────────────────────────────────────────────────────────────────
+
+    @classmethod
+    def create(cls, username: str, email: str, password: str,
+               role: str = "doctor") -> "User":
+        """
+        Insert new user with hashed password into SQLite.
+        Raises ValueError if username or email already exists.
+        """
+        hashed = cls.hash_password(password)
+        with get_connection() as conn:
+            try:
+                cur = conn.execute(
+                    "INSERT INTO users (username,email,password,role) VALUES (?,?,?,?)",
+                    (username.strip(), email.strip().lower(), hashed, role),
+                )
+                conn.commit()
+                logger.info("User created: %s", username)
+                return cls(cur.lastrowid, username, email, hashed, role)
+            except Exception as exc:
+                logger.warning("User creation failed for %s: %s", username, exc)
+                raise ValueError("Username or email already exists.") from exc
+
+    @classmethod
+    def get_by_id(cls, user_id: int) -> "User | None":
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM users WHERE id=?", (user_id,)
+            ).fetchone()
+        return cls(**dict(row)) if row else None
+
+    @classmethod
+    def get_by_username(cls, username: str) -> "User | None":
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM users WHERE username=?", (username.strip(),)
+            ).fetchone()
+        return cls(**dict(row)) if row else None
+
+    def __repr__(self):
+        return f"<User {self.id} {self.username} [{self.role}]>"
