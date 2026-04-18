@@ -1,54 +1,67 @@
-# StrokeGuard Setup Guide (Linux)
+"""
+routes/auth.py  –  Authentication Blueprint
+Handles: register, login, logout
+Security: CSRF (Flask-WTF), password hashing, generic error msg,
+          open-redirect prevention, session hardening.
+"""
 
-I've reviewed the codebase and identified a few startup problems that would prevent the application from running on your Linux machine. I've already fixed the code, but you will need to follow these steps to get everything up and running.
+import logging
+from flask import Blueprint, render_template, redirect, url_for, flash, request, session
+from flask_login import login_user, logout_user, login_required, current_user
+from ..forms import LoginForm, RegistrationForm
+from ..models.user import User
 
-## 🚨 Startup Problems Addressed
-1. **Import Error in `run.py`**: The main entry point was failing with a `ModuleNotFoundError` because it was placed inside the package. **I have fixed this securely** within the script so it resolves paths correctly.
-2. **Incompatible Virtual Environment**: The `/venv` folder included in your download was created on a Windows machine. It won't work on your Linux system.
-3. **Missing MongoDB Engine**: The application requires MongoDB to be running to store patient data, which isn't currently installed/active in your standard environment.
+logger = logging.getLogger(__name__)
+auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
----
 
-## The `uv` Automation Track
+@auth_bp.route("/register", methods=["GET", "POST"])
+def register():
+    if current_user.is_authenticated:
+        return redirect(url_for("dashboard.index"))
 
-To make setting up easier, the application has been initialized with `uv` and includes simple automation scripts available for both Linux/macOS (`.sh`) and Windows (`.bat`).
+    form = RegistrationForm()
+    if form.validate_on_submit():
+        try:
+            User.create(form.username.data, form.email.data, form.password.data)
+            flash("Account created! Please sign in.", "success")
+            logger.info("Registered: %s", form.username.data)
+            return redirect(url_for("auth.login"))
+        except ValueError as exc:
+            flash(str(exc), "danger")
 
-> **Windows Users:** You can simply double-click the `.bat` files in your File Explorer!
+    return render_template("auth/register.html", form=form, title="Register")
 
-### 1. Setup Everything
-From the directory containing this file, run the setup script. It will synchronize all Python dependencies with `uv`, boot up the MongoDB container using Docker Desktop, and import the CSV data.
 
-**Linux/macOS:**
-```bash
-./setup.sh
-```
-**Windows:**
-```cmd
-setup.bat
-```
+@auth_bp.route("/login", methods=["GET", "POST"])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for("dashboard.index"))
 
-### 2. Run the App
-Once setup completes, start the local Flask server:
+    form = LoginForm()
+    if form.validate_on_submit():
+        user = User.get_by_username(form.username.data)
+        # Generic message prevents username enumeration
+        if user and user.verify_password(form.password.data):
+            login_user(user, remember=form.remember_me.data)
+            session.permanent = True
+            logger.info("Login: %s", user.username)
+            # Safe redirect — reject absolute URLs to prevent open-redirect
+            next_page = request.args.get("next", "")
+            if next_page and not next_page.startswith("/"):
+                next_page = ""
+            return redirect(next_page or url_for("dashboard.index"))
+        else:
+            flash("Invalid username or password.", "danger")
+            logger.warning("Failed login attempt: %s", form.username.data)
 
-**Linux/macOS:**
-```bash
-./run.sh
-```
-**Windows:**
-```cmd
-run.bat
-```
+    return render_template("auth/login.html", form=form, title="Sign In")
 
-The app will now be running correctly. You can access it in your browser at `http://127.0.0.1:5000`. You can begin by clicking **Register** to create a test doctor account!
 
-### 3. Teardown
-If you ever want to perform a deep clean, drop the MongoDB database container, destroy the `.venv`, or clear all caches:
-
-**Linux/macOS:**
-```bash
-./cleanup.sh
-```
-**Windows:**
-```cmd
-cleanup.bat
-```
+@auth_bp.route("/logout")
+@login_required
+def logout():
+    logger.info("Logout: %s", current_user.username)
+    logout_user()
+    flash("You have been signed out.", "info")
+    return redirect(url_for("auth.login"))
